@@ -101,56 +101,78 @@ def parse_top250_list(html):
     soup = BeautifulSoup(html, "lxml")
     books = []
 
-    # 每本书在一个 <table> 中
-    tables = soup.find_all("table", width="100%")
-    for table in tables:
+    # 豆瓣 Top250 实际结构：每本书是一个 <tr class="item">
+    items = soup.find_all("tr", class_="item")
+    logger.debug(f"找到 <tr class='item'> 数量: {len(items)}")
+
+    # 兼容备用结构：<table width="100%">
+    if not items:
+        items = soup.find_all("table", width="100%")
+        logger.debug(f"回退到 <table width='100%'> 数量: {len(items)}")
+
+    # 再次兼容：通过 div.pl2 直接定位
+    if not items:
+        pl2_divs = soup.find_all("div", class_="pl2")
+        logger.debug(f"回退到 div.pl2 数量: {len(pl2_divs)}")
+        if pl2_divs:
+            # 用 pl2 的父级 td/tr 作为 item
+            items = [div.find_parent("tr") or div.find_parent("td") or div for div in pl2_divs]
+
+    if not items:
+        # 输出 HTML 片段帮助调试
+        snippet = html[:2000] if html else "(empty)"
+        logger.warning(f"未找到任何书籍条目，HTML片段:\n{snippet}")
+        return books
+
+    for item in items:
         book = {}
 
         # 书名和链接
-        title_link = table.find("div", class_="pl2")
+        title_link = item.find("div", class_="pl2")
         if title_link:
             a_tag = title_link.find("a")
             if a_tag:
-                book["title"] = a_tag.get_text(strip=True).replace("\n", " ").replace(" ", " ")
-                book["book_url"] = a_tag["href"].strip()
-                # 从 URL 提取 douban_id
+                book["title"] = a_tag.get_text(strip=True).replace("\n", " ").strip()
+                book["book_url"] = a_tag.get("href", "").strip()
                 match = re.search(r"/subject/(\d+)/", book["book_url"])
                 if match:
                     book["douban_id"] = match.group(1)
 
         # 封面图片
-        img_tag = table.find("img")
+        img_tag = item.find("img")
         if img_tag:
             book["cover_url"] = img_tag.get("src", "")
 
         # 书籍元信息（作者 / 出版社 / 日期 / 价格）
-        pl_tag = table.find("p", class_="pl")
+        pl_tag = item.find("p", class_="pl")
         if pl_tag:
             meta_text = pl_tag.get_text(strip=True)
             book["meta_text"] = meta_text
             _parse_meta_text(meta_text, book)
 
         # 评分
-        rating_tag = table.find("span", class_="rating_nums")
+        rating_tag = item.find("span", class_="rating_nums")
         if rating_tag:
             try:
                 book["rating"] = float(rating_tag.get_text(strip=True))
             except ValueError:
                 book["rating"] = None
 
-        # 评价人数
-        rating_count_tag = table.find("span", class_="pl")
-        if rating_count_tag:
-            count_text = rating_count_tag.get_text(strip=True)
+        # 评价人数：格式为 "(N人评价)"
+        for span in item.find_all("span", class_="pl"):
+            count_text = span.get_text(strip=True)
             match = re.search(r"(\d+)", count_text)
-            if match:
+            if match and "评价" in count_text:
                 book["rating_count"] = int(match.group(1))
+                break
 
-        # 排名
-        rank_tag = table.find("td", width="20px")
-        if rank_tag:
+        # 排名：<td class="number"> 或第一个 <td>
+        rank_td = item.find("td", class_="number")
+        if not rank_td:
+            rank_td = item.find("td")
+        if rank_td:
             try:
-                book["rank"] = int(rank_tag.get_text(strip=True).rstrip("."))
+                book["rank"] = int(rank_td.get_text(strip=True).rstrip("."))
             except ValueError:
                 pass
 
