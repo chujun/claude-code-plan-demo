@@ -36,11 +36,10 @@ def create_session():
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
-    # 默认 headers
+    # 默认 headers（不手动设置 Accept-Encoding，让 requests 自动处理解压）
     session.headers.update({
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
     })
 
