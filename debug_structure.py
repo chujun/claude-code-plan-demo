@@ -1,13 +1,12 @@
 """临时诊断脚本：查看豆瓣页面实际 HTML 结构"""
 import sys
+import os
 import requests
 import random
 from bs4 import BeautifulSoup
 from config import USER_AGENTS
-
-# 从本地缓存文件读取（如果有），否则重新抓取
-import os
-cache_file = "/tmp/douban_top250_page1.html"
+import tempfile
+cache_file = os.path.join(tempfile.gettempdir(), "douban_top250_page1.html")
 
 if os.path.exists(cache_file):
     print(f"从缓存读取: {cache_file}")
